@@ -126,13 +126,21 @@ export class QikinkClient {
       qikink_shipping: payload.qikink_shipping || '1',
       gateway: payload.gateway || 'Prepaid',
       total_order_value: String(payload.total_order_value || '0'),
-      line_items: payload.line_items.map((item) => ({
-        search_from_my_products: item.search_from_my_products ?? (isSandbox ? 0 : 1),
-        sku: item.sku,
-        quantity: String(item.quantity),
-        price: String(item.price),
-        ...(item.designs ? { designs: item.designs } : {}),
-      })),
+      line_items: payload.line_items.map((item) => {
+        // If the SKU is a Qikink Store SKU (starts with 'v-') or has no live designs attached,
+        // search_from_my_products is 1 (lookup from merchant's saved Qikink products).
+        // If it is a blank garment SKU with live design artwork specifications, search_from_my_products is 0.
+        const isStoreSku = typeof item.sku === 'string' && (item.sku.startsWith('v-') || !item.designs || item.designs.length === 0);
+        const searchFromMyProducts = item.search_from_my_products ?? (isStoreSku ? 1 : 0);
+
+        return {
+          search_from_my_products: searchFromMyProducts,
+          sku: item.sku,
+          quantity: String(item.quantity),
+          price: String(item.price),
+          ...(item.designs && item.designs.length > 0 ? { designs: item.designs } : {}),
+        };
+      }),
       shipping_address: {
         first_name: payload.shipping_address.first_name,
         last_name: payload.shipping_address.last_name || payload.shipping_address.first_name,

@@ -14,8 +14,40 @@ export default function AdminSettingsPage() {
   const [officerEmail, setOfficerEmail] = useState('grievance@imagix.in');
   const [saved, setSaved] = useState(false);
 
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('imagix_business_settings');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.businessName) setBusinessName(parsed.businessName);
+        if (parsed.brandName) setBrandName(parsed.brandName);
+        if (parsed.gstin) setGstin(parsed.gstin);
+        if (parsed.address) setAddress(parsed.address);
+        if (parsed.supportEmail) setSupportEmail(parsed.supportEmail);
+        if (parsed.supportPhone) setSupportPhone(parsed.supportPhone);
+        if (parsed.officerName) setOfficerName(parsed.officerName);
+        if (parsed.officerEmail) setOfficerEmail(parsed.officerEmail);
+      }
+    } catch {}
+  }, []);
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    try {
+      localStorage.setItem(
+        'imagix_business_settings',
+        JSON.stringify({
+          businessName,
+          brandName,
+          gstin,
+          address,
+          supportEmail,
+          supportPhone,
+          officerName,
+          officerEmail,
+        })
+      );
+    } catch {}
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };

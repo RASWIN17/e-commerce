@@ -12,7 +12,7 @@ export async function getProducts(): Promise<Product[]> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('products')
-      .select('*, images:product_images(*), variants:product_variants(*), category:categories(*)')
+      .select('*, images:product_images(*), variants:product_variants(*), category:categories(*), designs:product_designs(*)')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
@@ -25,6 +25,7 @@ export async function getProducts(): Promise<Product[]> {
       ...p,
       images: sortImages(p.images),
       variants: p.variants || [],
+      designs: p.designs || [],
     }));
   } catch (err) {
     console.error('Unexpected error in getProducts:', err);
@@ -37,7 +38,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('products')
-      .select('*, images:product_images(*), variants:product_variants(*), category:categories(*)')
+      .select('*, images:product_images(*), variants:product_variants(*), category:categories(*), designs:product_designs(*)')
       .eq('slug', slug)
       .eq('is_active', true)
       .single();
@@ -50,6 +51,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
       ...data,
       images: sortImages(data.images),
       variants: data.variants || [],
+      designs: data.designs || [],
     };
   } catch (err) {
     console.error('Unexpected error in getProductBySlug:', err);

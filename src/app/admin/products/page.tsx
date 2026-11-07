@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Plus, Trash2, Eye, CheckCircle2, Loader2, AlertTriangle, Tag, Sliders, Edit3, X } from 'lucide-react';
+import { Plus, Trash2, Eye, CheckCircle2, Loader2, AlertTriangle, Tag, Sliders, Edit3, X, FileText, Image as ImageIcon, Sparkles } from 'lucide-react';
 
 interface CategoryInfo {
   id: string;
@@ -18,6 +18,16 @@ interface VariantItem {
   color_name: string;
   price_paise?: number;
   qikink_sku?: string;
+  stock_quantity?: number;
+}
+
+interface DesignItem {
+  id?: string;
+  design_code: string;
+  artwork_url: string;
+  placement: string;
+  print_width_inches: number;
+  print_height_inches: number;
 }
 
 interface AdminProduct {
@@ -27,8 +37,10 @@ interface AdminProduct {
   category_id?: string | null;
   category?: CategoryInfo | null;
   short_description?: string;
+  detailed_description?: string;
   fabric_info?: string;
   fit_info?: string;
+  wash_care?: string;
   base_price_paise: number;
   compare_at_price_paise?: number;
   prior_30d_price_paise?: number;
@@ -42,6 +54,7 @@ interface AdminProduct {
     is_primary?: boolean;
   }>;
   variants: VariantItem[];
+  designs?: DesignItem[];
 }
 
 const DEFAULT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
@@ -56,21 +69,33 @@ export default function AdminProductsPage() {
   const [productToDelete, setProductToDelete] = useState<AdminProduct | null>(null);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Edit SKUs Modal state
+  // Edit Product Modal state
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
-  const [editableVariants, setEditableVariants] = useState<VariantItem[]>([]);
-  const [savingSkus, setSavingSkus] = useState(false);
+  const [editFormData, setEditFormData] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Add Product Form states
   const [newName, setNewName] = useState('');
   const [newCategoryId, setNewCategoryId] = useState('');
   const [newPrice, setNewPrice] = useState('799');
   const [newComparePrice, setNewComparePrice] = useState('1199');
+  const [newGstRate, setNewGstRate] = useState('5');
   const [newFabric, setNewFabric] = useState('100% Combed Compact Cotton, 240 GSM');
+  const [newFit, setNewFit] = useState('Oversized boxy drape, drop shoulder');
+  const [newWashCare, setNewWashCare] = useState('Machine wash cold inside out, tumble dry low');
+  const [newShortDesc, setNewShortDesc] = useState('');
+  const [newDetailedDesc, setNewDetailedDesc] = useState('');
   const [newColor, setNewColor] = useState('White');
   const [newImageUrl, setNewImageUrl] = useState(
     'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=900&auto=format&fit=crop'
   );
+
+  // Qikink Artwork & Design fields for Add Product
+  const [newDesignCode, setNewDesignCode] = useState('');
+  const [newArtworkUrl, setNewArtworkUrl] = useState('');
+  const [newPlacement, setNewPlacement] = useState('front');
+  const [newPrintWidth, setNewPrintWidth] = useState('10');
+  const [newPrintHeight, setNewPrintHeight] = useState('12');
 
   // Custom variants for new product
   const [variantInputs, setVariantInputs] = useState<
@@ -115,6 +140,9 @@ export default function AdminProductsPage() {
         sku: v.sku ? v.sku : `${prefix}-${newColor.slice(0, 3).toUpperCase()}-${v.size}`,
       }))
     );
+    if (!newDesignCode) {
+      setNewDesignCode(`IMX-DES-${val.slice(0, 4).toUpperCase() || 'ART'}`);
+    }
   };
 
   const handleApplyQikinkPattern = () => {
@@ -154,22 +182,34 @@ export default function AdminProductsPage() {
           name: newName,
           slug,
           category_id: newCategoryId || null,
+          short_description: newShortDesc || `${newName} tailored from heavyweight combed cotton.`,
+          detailed_description: newDetailedDesc || `Precision handcrafted in Tirupur, India with tailored minimal drape.`,
           fabric_info: newFabric,
+          fit_info: newFit,
+          wash_care: newWashCare,
           base_price_paise: pricePaise,
           compare_at_price_paise: comparePricePaise,
           prior_30d_price_paise: comparePricePaise,
+          gst_rate_percentage: parseInt(newGstRate, 10) || 5,
           image_url: newImageUrl,
           color_name: newColor,
+          design_code: newDesignCode,
+          artwork_url: newArtworkUrl || newImageUrl,
+          placement: newPlacement,
+          print_width_inches: parseFloat(newPrintWidth) || 10,
+          print_height_inches: parseFloat(newPrintHeight) || 12,
           variants: activeVariants,
         }),
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setMessage({ text: `Product "${newName}" created successfully with custom SKUs!`, type: 'success' });
+        setMessage({ text: `Product "${newName}" created successfully with custom SKUs & designs!`, type: 'success' });
         setShowAddModal(false);
         setNewName('');
         setNewCategoryId('');
+        setNewDesignCode('');
+        setNewArtworkUrl('');
         fetchCatalogData();
       } else {
         setMessage({ text: `Failed to create product: ${data.error || 'Server error'}`, type: 'error' });
@@ -178,6 +218,85 @@ export default function AdminProductsPage() {
       setMessage({ text: `Error: ${err.message || 'Product creation failed'}`, type: 'error' });
     } finally {
       setSaving(false);
+      setTimeout(() => setMessage(null), 5000);
+    }
+  };
+
+  // Open Full Edit Product Modal
+  const handleOpenEditProduct = (p: AdminProduct) => {
+    setEditingProduct(p);
+    const primaryDesign = p.designs?.[0];
+    setEditFormData({
+      name: p.name,
+      category_id: p.category_id || '',
+      base_price: (p.base_price_paise / 100).toFixed(0),
+      compare_at_price: ((p.compare_at_price_paise || p.base_price_paise) / 100).toFixed(0),
+      gst_rate_percentage: String(p.gst_rate_percentage || 5),
+      fabric_info: p.fabric_info || '',
+      fit_info: p.fit_info || '',
+      wash_care: p.wash_care || '',
+      short_description: p.short_description || '',
+      detailed_description: p.detailed_description || '',
+      image_url: p.images?.[0]?.image_url || '',
+      design_code: primaryDesign?.design_code || '',
+      artwork_url: primaryDesign?.artwork_url || '',
+      placement: primaryDesign?.placement || 'front',
+      print_width_inches: String(primaryDesign?.print_width_inches || 10),
+      print_height_inches: String(primaryDesign?.print_height_inches || 12),
+      variants: (p.variants || []).map((v) => ({
+        id: v.id,
+        size: v.size,
+        color_name: v.color_name,
+        sku: v.sku,
+        qikink_sku: v.qikink_sku || '',
+        price_paise: v.price_paise,
+      })),
+    });
+  };
+
+  const handleSaveEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    try {
+      setSavingEdit(true);
+      const res = await fetch('/api/admin/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: editingProduct.id,
+          name: editFormData.name,
+          category_id: editFormData.category_id || null,
+          base_price_paise: parseInt(editFormData.base_price, 10) * 100,
+          compare_at_price_paise: parseInt(editFormData.compare_at_price, 10) * 100,
+          gst_rate_percentage: parseInt(editFormData.gst_rate_percentage, 10) || 5,
+          fabric_info: editFormData.fabric_info,
+          fit_info: editFormData.fit_info,
+          wash_care: editFormData.wash_care,
+          short_description: editFormData.short_description,
+          detailed_description: editFormData.detailed_description,
+          image_url: editFormData.image_url,
+          design_code: editFormData.design_code,
+          artwork_url: editFormData.artwork_url,
+          placement: editFormData.placement,
+          print_width_inches: parseFloat(editFormData.print_width_inches) || 10,
+          print_height_inches: parseFloat(editFormData.print_height_inches) || 12,
+          variants: editFormData.variants,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMessage({ text: `Product "${editFormData.name}" updated successfully!`, type: 'success' });
+        setEditingProduct(null);
+        fetchCatalogData();
+      } else {
+        setMessage({ text: `Failed to update product: ${data.error || 'Server error'}`, type: 'error' });
+      }
+    } catch (err: any) {
+      setMessage({ text: `Error updating product: ${err.message}`, type: 'error' });
+    } finally {
+      setSavingEdit(false);
       setTimeout(() => setMessage(null), 5000);
     }
   };
@@ -207,51 +326,6 @@ export default function AdminProductsPage() {
     }
   };
 
-  // Open Edit SKUs Modal for an existing product
-  const handleOpenEditSkus = (p: AdminProduct) => {
-    setEditingProduct(p);
-    setEditableVariants(
-      (p.variants || []).map((v) => ({
-        id: v.id,
-        size: v.size,
-        color_name: v.color_name,
-        sku: v.sku,
-        qikink_sku: v.qikink_sku || '',
-      }))
-    );
-  };
-
-  const handleSaveSkus = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProduct) return;
-
-    try {
-      setSavingSkus(true);
-      const res = await fetch('/api/admin/products', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: editingProduct.id,
-          variants: editableVariants,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setMessage({ text: `SKUs updated for "${editingProduct.name}"!`, type: 'success' });
-        setEditingProduct(null);
-        fetchCatalogData();
-      } else {
-        setMessage({ text: `Failed to update SKUs: ${data.error || 'Server error'}`, type: 'error' });
-      }
-    } catch (err: any) {
-      setMessage({ text: `Error saving SKUs: ${err.message}`, type: 'error' });
-    } finally {
-      setSavingSkus(false);
-      setTimeout(() => setMessage(null), 5000);
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -261,7 +335,7 @@ export default function AdminProductsPage() {
             Product Catalogue Management
           </h1>
           <p className="text-xs text-[#77736C] mt-1">
-            Manage your store apparel, categorize styles, configure Qikink SKUs, and remove discontinued products.
+            Complete management of products, categories, Qikink Store SKUs, blank garment specs, and 300 DPI print artwork.
           </p>
         </div>
 
@@ -316,7 +390,7 @@ export default function AdminProductsPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-[#E8E5DF] text-[#77736C] bg-[#F7F6F2]">
-                  <th className="py-3 px-4 font-medium">Product</th>
+                  <th className="py-3 px-4 font-medium">Product & Artwork</th>
                   <th className="py-3 px-4 font-medium">Category</th>
                   <th className="py-3 px-4 font-medium">Selling Price</th>
                   <th className="py-3 px-4 font-medium">Sizes & Qikink SKUs</th>
@@ -327,11 +401,12 @@ export default function AdminProductsPage() {
               <tbody className="divide-y divide-[#E8E5DF] text-[#171717]">
                 {products.map((p) => {
                   const primaryImg = p.images?.[0]?.image_url || '/placeholder.png';
+                  const design = p.designs?.[0];
                   return (
                     <tr key={p.id} className="hover:bg-[#F7F6F2]">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-[#EFECE6] relative rounded-sm overflow-hidden flex-shrink-0 border border-[#E8E5DF]">
+                          <div className="w-12 h-12 bg-[#EFECE6] relative rounded-sm overflow-hidden flex-shrink-0 border border-[#E8E5DF]">
                             <Image
                               src={primaryImg}
                               alt={p.name}
@@ -340,8 +415,13 @@ export default function AdminProductsPage() {
                             />
                           </div>
                           <div>
-                            <span className="font-semibold text-[#171717] block">{p.name}</span>
-                            <span className="text-[11px] text-[#77736C] font-mono">{p.slug}</span>
+                            <span className="font-semibold text-[#171717] block text-sm">{p.name}</span>
+                            <span className="text-[11px] text-[#77736C] font-mono block">{p.slug}</span>
+                            {design && (
+                              <span className="text-[10px] text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-xs inline-block mt-0.5 font-mono">
+                                Design: {design.design_code}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -356,6 +436,11 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="py-3 px-4 font-bold text-[#171717]">
                         ₹{(p.base_price_paise / 100).toFixed(0)}
+                        {p.compare_at_price_paise && p.compare_at_price_paise > p.base_price_paise && (
+                          <span className="text-[10px] text-[#77736C] line-through block font-normal">
+                            ₹{(p.compare_at_price_paise / 100).toFixed(0)}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <div className="space-y-1">
@@ -387,12 +472,12 @@ export default function AdminProductsPage() {
                       </td>
                       <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
                         <button
-                          onClick={() => handleOpenEditSkus(p)}
-                          className="border border-[#D5D1C8] px-2 py-1 rounded-sm text-[11px] text-[#171717] hover:bg-white inline-flex items-center gap-1 font-medium"
-                          title="View and edit Qikink SKUs for each size"
+                          onClick={() => handleOpenEditProduct(p)}
+                          className="border border-[#171717] bg-white text-[#171717] hover:bg-[#F7F6F2] px-2.5 py-1 rounded-sm text-[11px] font-semibold inline-flex items-center gap-1"
+                          title="Edit product details, descriptions, images, and Qikink SKUs"
                         >
-                          <Sliders className="w-3.5 h-3.5" />
-                          <span>Edit SKUs</span>
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
                         </button>
                         <Link
                           href={`/products/${p.slug}`}
@@ -419,80 +504,238 @@ export default function AdminProductsPage() {
         )}
       </div>
 
-      {/* Edit SKUs Modal for Existing Product */}
+      {/* Edit Product & Specifications Modal */}
       {editingProduct && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-sm shadow-xl max-w-lg w-full p-6 space-y-4 border border-[#E8E5DF] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-sm shadow-xl max-w-2xl w-full p-6 space-y-4 border border-[#E8E5DF] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E8E5DF] pb-3">
               <div>
-                <h2 className="text-sm font-bold uppercase tracking-wider text-[#171717]">
-                  Edit SKUs: {editingProduct.name}
+                <h2 className="text-base font-bold uppercase tracking-wider text-[#171717]">
+                  Edit Product: {editingProduct.name}
                 </h2>
-                <p className="text-xs text-[#77736C]">Configure exact Qikink Store SKUs or Blank SKUs for each size.</p>
+                <p className="text-xs text-[#77736C]">Update pricing, descriptions, Qikink design codes, and variant SKUs.</p>
               </div>
               <button onClick={() => setEditingProduct(null)} className="text-[#77736C] hover:text-[#171717]">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSkus} className="space-y-4 text-xs">
-              <div className="space-y-3">
-                {editableVariants.map((v, idx) => (
-                  <div key={v.id || idx} className="p-3 bg-[#F7F6F2] rounded-sm border border-[#E8E5DF] space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[#171717]">Size: {v.size} ({v.color_name})</span>
-                      <span className="text-[10px] text-[#77736C]">Variant ID: {v.id?.slice(0, 8)}...</span>
-                    </div>
+            <form onSubmit={handleSaveEditProduct} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[#171717] font-semibold mb-1">Product Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">Category</label>
+                  <select
+                    value={editFormData.category_id}
+                    onChange={(e) => setEditFormData({ ...editFormData, category_id: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">GST Rate (%)</label>
+                  <select
+                    value={editFormData.gst_rate_percentage}
+                    onChange={(e) => setEditFormData({ ...editFormData, gst_rate_percentage: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  >
+                    <option value="5">5% (Apparel below ₹1000)</option>
+                    <option value="12">12% (Apparel above ₹1000)</option>
+                    <option value="18">18% (Accessories / Other)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={editFormData.base_price}
+                    onChange={(e) => setEditFormData({ ...editFormData, base_price: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">MRP / Compare At (₹)</label>
+                  <input
+                    type="number"
+                    value={editFormData.compare_at_price}
+                    onChange={(e) => setEditFormData({ ...editFormData, compare_at_price: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[#171717] font-semibold mb-1">Fabric & GSM</label>
+                  <input
+                    type="text"
+                    value={editFormData.fabric_info}
+                    onChange={(e) => setEditFormData({ ...editFormData, fabric_info: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">Fit Specification</label>
+                  <input
+                    type="text"
+                    value={editFormData.fit_info}
+                    onChange={(e) => setEditFormData({ ...editFormData, fit_info: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">Wash & Care Instructions</label>
+                  <input
+                    type="text"
+                    value={editFormData.wash_care}
+                    onChange={(e) => setEditFormData({ ...editFormData, wash_care: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[#171717] font-semibold mb-1">Short Description</label>
+                  <input
+                    type="text"
+                    value={editFormData.short_description}
+                    onChange={(e) => setEditFormData({ ...editFormData, short_description: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[#171717] font-semibold mb-1">Mockup Image URL</label>
+                  <input
+                    type="url"
+                    value={editFormData.image_url}
+                    onChange={(e) => setEditFormData({ ...editFormData, image_url: e.target.value })}
+                    className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+              </div>
+
+              {/* Qikink Design Specs */}
+              <div className="border-t border-[#E8E5DF] pt-3 space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-800" />
+                  <span>Qikink Design & Artwork Specification</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[#171717] font-semibold mb-1">
+                      Qikink Design SKU / Design Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. pngtreebigdreamactiontshirtdesignpngimage_2994312"
+                      value={editFormData.design_code}
+                      onChange={(e) => setEditFormData({ ...editFormData, design_code: e.target.value })}
+                      className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#171717] font-semibold mb-1">Print Placement</label>
+                    <select
+                      value={editFormData.placement}
+                      onChange={(e) => setEditFormData({ ...editFormData, placement: e.target.value })}
+                      className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                    >
+                      <option value="front">Front Center</option>
+                      <option value="back">Back Center</option>
+                      <option value="left_pocket">Left Pocket / Chest</option>
+                      <option value="all_over">Full Surface</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[#171717] font-semibold mb-1">
+                      Print-Ready 300 DPI Artwork URL (Lossless PNG)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={editFormData.artwork_url}
+                      onChange={(e) => setEditFormData({ ...editFormData, artwork_url: e.target.value })}
+                      className="w-full p-2 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Variant SKUs */}
+              <div className="border-t border-[#E8E5DF] pt-3 space-y-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
+                  Variant SKUs & Qikink Store SKUs
+                </h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {editFormData.variants?.map((v: any, idx: number) => (
+                    <div key={v.id || idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 bg-[#F7F6F2] rounded-sm items-center">
+                      <div className="font-bold text-[#171717]">Size: {v.size}</div>
                       <div>
-                        <label className="block text-[11px] text-[#77736C] mb-0.5">Internal Store SKU</label>
                         <input
                           type="text"
                           value={v.sku}
+                          placeholder="Internal SKU"
                           onChange={(e) => {
-                            const updated = [...editableVariants];
+                            const updated = [...editFormData.variants];
                             updated[idx].sku = e.target.value;
-                            setEditableVariants(updated);
+                            setEditFormData({ ...editFormData, variants: updated });
                           }}
-                          className="w-full p-2 bg-white border border-[#D5D1C8] rounded-sm font-mono text-xs"
+                          className="w-full p-1.5 bg-white border border-[#D5D1C8] rounded-sm font-mono text-[11px]"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-semibold text-[#171717] mb-0.5">
-                          Qikink SKU / Store SKU *
-                        </label>
                         <input
                           type="text"
-                          placeholder="e.g. v-9R6o1... or UOsJsRnHs-Wh-XS"
                           value={v.qikink_sku || ''}
+                          placeholder="Qikink Store SKU (v-9R6o1...)"
                           onChange={(e) => {
-                            const updated = [...editableVariants];
+                            const updated = [...editFormData.variants];
                             updated[idx].qikink_sku = e.target.value;
-                            setEditableVariants(updated);
+                            setEditFormData({ ...editFormData, variants: updated });
                           }}
-                          className="w-full p-2 bg-white border border-black rounded-sm font-mono text-xs font-semibold"
+                          className="w-full p-1.5 bg-white border border-black rounded-sm font-mono text-[11px] font-semibold"
                         />
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#E8E5DF]">
                 <button
                   type="button"
                   onClick={() => setEditingProduct(null)}
-                  className="px-4 py-2 border border-[#D5D1C8] rounded-sm text-xs hover:bg-[#F7F6F2]"
+                  className="px-4 py-2 border border-[#D5D1C8] rounded-sm hover:bg-[#F7F6F2]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={savingSkus}
-                  className="bg-[#171717] text-white px-4 py-2 rounded-sm text-xs font-semibold uppercase tracking-wider hover:bg-[#2A2A2A] disabled:opacity-50"
+                  disabled={savingEdit}
+                  className="bg-[#171717] text-white px-4 py-2 rounded-sm font-semibold uppercase tracking-wider hover:bg-[#2A2A2A] disabled:opacity-50"
                 >
-                  {savingSkus ? 'Saving SKUs...' : 'Save SKUs in Supabase'}
+                  {savingEdit ? 'Updating Product...' : 'Save Product Changes'}
                 </button>
               </div>
             </form>
@@ -546,9 +789,12 @@ export default function AdminProductsPage() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-sm shadow-xl max-w-2xl w-full p-6 space-y-4 border border-[#E8E5DF] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E8E5DF] pb-3">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-[#171717]">
-                Add Apparel Product & SKUs
-              </h2>
+              <div>
+                <h2 className="text-base font-bold uppercase tracking-wider text-[#171717]">
+                  Add Apparel Product, Designs & SKUs
+                </h2>
+                <p className="text-xs text-[#77736C]">Complete product authoring with instant Qikink POD synchronization.</p>
+              </div>
               <button
                 onClick={() => setShowAddModal(false)}
                 className="text-[#77736C] hover:text-[#171717] text-lg font-bold"
@@ -622,7 +868,20 @@ export default function AdminProductsPage() {
                   />
                 </div>
 
-                <div className="sm:col-span-2">
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">GST Rate (%)</label>
+                  <select
+                    value={newGstRate}
+                    onChange={(e) => setNewGstRate(e.target.value)}
+                    className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  >
+                    <option value="5">5% (Apparel below ₹1000)</option>
+                    <option value="12">12% (Apparel above ₹1000)</option>
+                    <option value="18">18% (Accessories / Other)</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-[#171717] font-semibold mb-1">Fabric & GSM</label>
                   <input
                     type="text"
@@ -632,8 +891,39 @@ export default function AdminProductsPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">Fit Specification</label>
+                  <input
+                    type="text"
+                    value={newFit}
+                    onChange={(e) => setNewFit(e.target.value)}
+                    className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[#171717] font-semibold mb-1">Wash & Care Instructions</label>
+                  <input
+                    type="text"
+                    value={newWashCare}
+                    onChange={(e) => setNewWashCare(e.target.value)}
+                    className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
                 <div className="sm:col-span-2">
-                  <label className="block text-[#171717] font-semibold mb-1">Product Image URL *</label>
+                  <label className="block text-[#171717] font-semibold mb-1">Short Description</label>
+                  <input
+                    type="text"
+                    placeholder="Brief description for product cards..."
+                    value={newShortDesc}
+                    onChange={(e) => setNewShortDesc(e.target.value)}
+                    className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-[#171717] font-semibold mb-1">Product Mockup Image URL *</label>
                   <input
                     type="url"
                     required
@@ -644,12 +934,64 @@ export default function AdminProductsPage() {
                 </div>
               </div>
 
-              {/* SKU & Variant Section */}
+              {/* Qikink Design Specs Section */}
+              <div className="border-t border-[#E8E5DF] pt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-800" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
+                    Qikink Design SKU & Print Artwork
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[#171717] font-semibold mb-1">
+                      Qikink Design SKU / Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. pngtreebigdreamactiontshirtdesignpngimage_2994312"
+                      value={newDesignCode}
+                      onChange={(e) => setNewDesignCode(e.target.value)}
+                      className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#171717] font-semibold mb-1">Print Placement</label>
+                    <select
+                      value={newPlacement}
+                      onChange={(e) => setNewPlacement(e.target.value)}
+                      className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                    >
+                      <option value="front">Front Center</option>
+                      <option value="back">Back Center</option>
+                      <option value="left_pocket">Left Chest / Pocket</option>
+                      <option value="all_over">Full Surface</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[#171717] font-semibold mb-1">
+                      Print-Ready 300 DPI Artwork URL (PNG)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={newArtworkUrl}
+                      onChange={(e) => setNewArtworkUrl(e.target.value)}
+                      className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Size Variants & SKUs Section */}
               <div className="border-t border-[#E8E5DF] pt-4 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-                      Size Variants & Qikink SKUs
+                      Size Variants & Qikink Store SKUs
                     </h3>
                     <p className="text-[11px] text-[#77736C]">
                       Enter your Qikink Store SKU (e.g. `v-9R6o1...`) or Blank SKU (`UOsJsRnHs-Wh-XS`) for each size.
@@ -683,7 +1025,7 @@ export default function AdminProductsPage() {
                         <th className="p-2 w-16">Active</th>
                         <th className="p-2 w-16">Size</th>
                         <th className="p-2">Store SKU (Internal)</th>
-                        <th className="p-2">Qikink SKU / Store SKU *</th>
+                        <th className="p-2">Qikink Store SKU / Blank SKU *</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E5DF]">
@@ -726,7 +1068,7 @@ export default function AdminProductsPage() {
                                 updated[idx].qikink_sku = e.target.value;
                                 setVariantInputs(updated);
                               }}
-                              placeholder="e.g. v-9R6o1... or UOsJsRnHs-Wh-XS"
+                              placeholder="e.g. v-9R6o1iePaVZW1sYHMBcpubfWqQ7W-Haf or UOsJsRnHs-Wh-S"
                               className="w-full p-1.5 bg-white border border-black rounded-sm font-mono text-[11px] font-semibold disabled:bg-gray-100 disabled:border-[#D5D1C8]"
                             />
                           </td>
