@@ -101,6 +101,7 @@ export async function POST(req: Request) {
               design_code: design.design_code,
               placement: design.placement,
               artwork_url: design.artwork_url,
+              mockup_url: design.mockup_url || product.primary_image_url || design.artwork_url,
               print_width: design.print_width_inches,
               print_height: design.print_height_inches,
             }

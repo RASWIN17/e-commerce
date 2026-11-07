@@ -1,15 +1,24 @@
+export interface QikinkDesignItem {
+  design_code: string;
+  design_link?: string;
+  artwork_url?: string;
+  mockup_link?: string;
+  mockup_url?: string;
+  placement_sku?: string;
+  placement?: string;
+  width_inches?: string | number;
+  height_inches?: string | number;
+  width?: number;
+  height?: number;
+}
+
 export interface QikinkLineItem {
-  search_from_my_products?: number; // 0 for sandbox base catalog, 1 for live dashboard mapped products
+  search_from_my_products?: number; // 0 for base blank catalog, 1 for live dashboard mapped products
   sku: string;
   quantity: string | number;
   price: string | number;
-  designs?: Array<{
-    design_code: string;
-    design_link?: string;
-    placement: string;
-    width?: number;
-    height?: number;
-  }>;
+  print_type_id?: number;
+  designs?: QikinkDesignItem[];
 }
 
 export interface QikinkShippingAddress {
@@ -117,9 +126,19 @@ export class QikinkClient {
     const token = await this.getAccessToken();
 
     // Ensure strict payload formatting per Qikink guidelines:
-    // 1. order_number max 15 chars
-    const orderNumber = payload.order_number.slice(0, 15);
-    const isSandbox = this.baseUrl.includes('sandbox');
+    // 1. order_number: strictly alphanumeric, max 15 chars, no hyphens or special chars
+    const orderNumber = payload.order_number.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
+
+    const placementMap: Record<string, string> = {
+      front: 'fr',
+      fr: 'fr',
+      back: 'bk',
+      bk: 'bk',
+      left_sleeve: 'ls',
+      ls: 'ls',
+      right_sleeve: 'rs',
+      rs: 'rs',
+    };
 
     const formattedPayload = {
       order_number: orderNumber,
@@ -127,19 +146,37 @@ export class QikinkClient {
       gateway: payload.gateway || 'Prepaid',
       total_order_value: String(payload.total_order_value || '0'),
       line_items: payload.line_items.map((item) => {
-        // If the SKU is a Qikink Store SKU (starts with 'v-') or has no live designs attached,
-        // search_from_my_products is 1 (lookup from merchant's saved Qikink products).
-        // If it is a blank garment SKU with live design artwork specifications, search_from_my_products is 0.
-        const isStoreSku = typeof item.sku === 'string' && (item.sku.startsWith('v-') || !item.designs || item.designs.length === 0);
+        // If the SKU is a Qikink Store SKU (starts with 'v-'), search_from_my_products is 1 (stored in merchant Qikink catalog).
+        // If it is a blank garment SKU with live design specifications, search_from_my_products is 0.
+        const isStoreSku = typeof item.sku === 'string' && item.sku.startsWith('v-');
         const searchFromMyProducts = item.search_from_my_products ?? (isStoreSku ? 1 : 0);
 
-        return {
+        const formattedItem: any = {
           search_from_my_products: searchFromMyProducts,
           sku: item.sku,
           quantity: String(item.quantity),
           price: String(item.price),
-          ...(item.designs && item.designs.length > 0 ? { designs: item.designs } : {}),
         };
+
+        if (searchFromMyProducts === 0) {
+          formattedItem.print_type_id = item.print_type_id || 1;
+          if (item.designs && item.designs.length > 0) {
+            formattedItem.designs = item.designs.map((d) => {
+              const rawPlacement = (d.placement_sku || d.placement || 'front').toLowerCase();
+              const mappedPlacement = placementMap[rawPlacement] || 'fr';
+              return {
+                design_code: d.design_code || 'DESIGN01',
+                width_inches: String(d.width_inches || d.width || '10'),
+                height_inches: String(d.height_inches || d.height || '12'),
+                placement_sku: mappedPlacement,
+                design_link: d.design_link || d.artwork_url || '',
+                mockup_link: d.mockup_link || d.mockup_url || d.design_link || d.artwork_url || '',
+              };
+            });
+          }
+        }
+
+        return formattedItem;
       }),
       shipping_address: {
         first_name: payload.shipping_address.first_name,

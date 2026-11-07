@@ -106,6 +106,7 @@ export async function queueAndProcessFulfilmentJob(orderId: string): Promise<Pro
             {
               design_code: design.design_code,
               design_link: design.artwork_url,
+              mockup_link: design.mockup_url || design.artwork_url,
               placement: design.placement || 'front',
               width: design.print_width,
               height: design.print_height,
