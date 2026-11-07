@@ -24,7 +24,7 @@ export async function GET() {
         order_items (
           id,
           product_name,
-          variant_title,
+          variant_name,
           quantity,
           unit_price_paise
         ),
@@ -88,7 +88,7 @@ export async function GET() {
       const firstItem = ord.order_items?.[0];
       const itemCount = ord.order_items?.length || 0;
       const productSummary = firstItem
-        ? `${firstItem.product_name || 'Apparel Item'}${firstItem.variant_title ? ` (${firstItem.variant_title})` : ''}${itemCount > 1 ? ` +${itemCount - 1} more` : ''}`
+        ? `${firstItem.product_name || 'Apparel Item'}${firstItem.variant_name ? ` (${firstItem.variant_name})` : ''}${itemCount > 1 ? ` +${itemCount - 1} more` : ''}`
         : 'Apparel Item';
 
       const latestPayment = ord.payments?.[0];

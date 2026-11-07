@@ -26,7 +26,7 @@ export async function GET(req: Request) {
         order_items (
           id,
           product_name,
-          variant_title,
+          variant_name,
           quantity,
           unit_price_paise,
           qikink_sku

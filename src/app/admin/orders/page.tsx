@@ -31,7 +31,7 @@ interface AdminOrder {
   items: Array<{
     id: string;
     product_name: string;
-    variant_title?: string;
+    variant_name?: string;
     quantity: number;
     unit_price_paise: number;
     qikink_sku?: string;
