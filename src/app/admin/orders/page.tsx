@@ -206,7 +206,18 @@ export default function AdminOrdersPage() {
                     </td>
                     <td className="py-3 px-4">
                       {ord.qikinkOrderId ? (
-                        <span className="font-mono text-[#171717]">{ord.qikinkOrderId}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-[#171717]">{ord.qikinkOrderId}</span>
+                          <a
+                            href={`/api/admin/qikink/order?id=${ord.qikinkOrderId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View live Qikink order data"
+                            className="text-[#77736C] hover:text-[#171717]"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
                       ) : (
                         <span className="text-gray-500 font-medium">
                           {ord.paymentStatus === 'PAID' ? 'Queued for Qikink' : 'Awaiting Payment'}
