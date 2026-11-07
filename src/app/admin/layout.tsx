@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
+  FolderTree,
   Layers,
   ShoppingBag,
   Tag,
@@ -22,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { label: 'Overview', href: '/admin', icon: LayoutDashboard },
     { label: 'Products', href: '/admin/products', icon: Package },
+    { label: 'Categories', href: '/admin/categories', icon: FolderTree },
     { label: 'Qikink Design Mappings', href: '/admin/qikink-designs', icon: Layers },
     { label: 'Orders & Fulfilment', href: '/admin/orders', icon: ShoppingBag },
     { label: 'Coupons & Offers', href: '/admin/coupons', icon: Tag },

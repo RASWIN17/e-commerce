@@ -12,7 +12,7 @@ export async function getProducts(): Promise<Product[]> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from('products')
-      .select('*, images:product_images(*), variants:product_variants(*)')
+      .select('*, images:product_images(*), variants:product_variants(*), category:categories(*)')
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 

@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getProducts } from '@/lib/catalog';
+import { getProducts, getCategories } from '@/lib/catalog';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const products = await getProducts();
-    return NextResponse.json({ products });
+    const [products, categories] = await Promise.all([
+      getProducts(),
+      getCategories(),
+    ]);
+    return NextResponse.json({ products, categories });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to fetch products' }, { status: 500 });
   }
@@ -24,6 +27,7 @@ export async function POST(req: Request) {
     const {
       name,
       slug,
+      category_id,
       short_description,
       detailed_description,
       fabric_info,
@@ -43,12 +47,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing required product fields' }, { status: 400 });
     }
 
-    // 1. Insert product
+    // 1. Insert product with category_id
     const { data: product, error: prodErr } = await supabase
       .from('products')
       .insert({
         name,
         slug,
+        category_id: category_id || null,
         short_description: short_description || 'Heavyweight organic apparel handcrafted for minimal drape.',
         detailed_description: detailed_description || 'Handcrafted in Tirupur, India from combed compact cotton.',
         fabric_info: fabric_info || '100% Combed Compact Cotton, 240 GSM',
@@ -137,21 +142,20 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Missing product ID' }, { status: 400 });
     }
 
-    // 1. Clean up collection associations
-    await supabase.from('collection_products').delete().eq('product_id', id);
-
-    // 2. Delete product (variants, images, designs cascade automatically via FK)
-    const { error } = await supabase.from('products').delete().eq('id', id);
+    // Delete product from Supabase (cascades variants, images, designs, and collection links)
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
 
     if (error) {
-      console.error('Error deleting product from Supabase:', error);
+      console.error('Error deleting product:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message: 'Product deleted successfully' });
   } catch (err: any) {
-    console.error('DELETE /api/admin/products error:', err);
+    console.error('Error in admin product DELETE:', err);
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
   }
 }
-

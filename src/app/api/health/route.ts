@@ -35,3 +35,4 @@ export async function GET() {
       : 'Add missing environment variables in Vercel Dashboard (Settings > Environment Variables).',
   });
 }
+

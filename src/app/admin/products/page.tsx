@@ -3,12 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Plus, Edit3, Trash2, Eye, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Eye, CheckCircle2, Loader2, AlertTriangle, Tag } from 'lucide-react';
+
+interface CategoryInfo {
+  id: string;
+  name: string;
+  slug: string;
+}
 
 interface AdminProduct {
   id: string;
   name: string;
   slug: string;
+  category_id?: string | null;
+  category?: CategoryInfo | null;
   short_description?: string;
   fabric_info?: string;
   fit_info?: string;
@@ -36,14 +44,17 @@ interface AdminProduct {
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [productToDelete, setProductToDelete] = useState<AdminProduct | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Form states
   const [newName, setNewName] = useState('');
+  const [newCategoryId, setNewCategoryId] = useState('');
   const [newPrice, setNewPrice] = useState('799');
   const [newComparePrice, setNewComparePrice] = useState('1199');
   const [newFabric, setNewFabric] = useState('100% Combed Compact Cotton, 240 GSM');
@@ -51,13 +62,14 @@ export default function AdminProductsPage() {
     'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=900&auto=format&fit=crop'
   );
 
-  const fetchProducts = async () => {
+  const fetchCatalogData = async () => {
     try {
       setLoading(true);
       const res = await fetch('/api/admin/products');
       if (res.ok) {
         const data = await res.json();
         setProducts(data.products || []);
+        setCategories(data.categories || []);
       }
     } catch (err) {
       console.error('Failed to load admin products:', err);
@@ -67,7 +79,7 @@ export default function AdminProductsPage() {
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchCatalogData();
   }, []);
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -86,6 +98,7 @@ export default function AdminProductsPage() {
         body: JSON.stringify({
           name: newName,
           slug,
+          category_id: newCategoryId || null,
           fabric_info: newFabric,
           base_price_paise: pricePaise,
           compare_at_price_paise: comparePricePaise,
@@ -96,43 +109,44 @@ export default function AdminProductsPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setSuccessMessage(`Product "${newName}" successfully created in database!`);
+        setMessage({ text: `Product "${newName}" created successfully!`, type: 'success' });
         setShowAddModal(false);
         setNewName('');
-        fetchProducts();
+        setNewCategoryId('');
+        fetchCatalogData();
       } else {
-        alert(`Failed to create product: ${data.error || 'Server error'}`);
+        setMessage({ text: `Failed to create product: ${data.error || 'Server error'}`, type: 'error' });
       }
     } catch (err: any) {
-      alert(`Error: ${err.message || 'Product creation failed'}`);
+      setMessage({ text: `Error: ${err.message || 'Product creation failed'}`, type: 'error' });
     } finally {
       setSaving(false);
-      setTimeout(() => setSuccessMessage(''), 4000);
+      setTimeout(() => setMessage(null), 5000);
     }
   };
 
-  const handleDeleteProduct = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}" from the store catalog? This action will remove the product and its variants.`)) {
-      return;
-    }
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
 
     try {
-      setDeletingId(id);
-      const res = await fetch(`/api/admin/products?id=${encodeURIComponent(id)}`, {
+      setDeletingId(productToDelete.id);
+      const res = await fetch(`/api/admin/products?id=${productToDelete.id}`, {
         method: 'DELETE',
       });
+
       const data = await res.json();
       if (res.ok && data.success) {
-        setSuccessMessage(`Product "${name}" deleted successfully.`);
-        setProducts((prev) => prev.filter((p) => p.id !== id));
+        setMessage({ text: `Product "${productToDelete.name}" deleted successfully from catalog.`, type: 'success' });
+        setProductToDelete(null);
+        fetchCatalogData();
       } else {
-        alert(`Failed to delete product: ${data.error || 'Server error'}`);
+        setMessage({ text: `Failed to delete product: ${data.error || 'Server error'}`, type: 'error' });
       }
     } catch (err: any) {
-      alert(`Error deleting product: ${err.message || 'Network error'}`);
+      setMessage({ text: `Error deleting product: ${err.message}`, type: 'error' });
     } finally {
       setDeletingId(null);
-      setTimeout(() => setSuccessMessage(''), 4000);
+      setTimeout(() => setMessage(null), 5000);
     }
   };
 
@@ -144,23 +158,42 @@ export default function AdminProductsPage() {
             Product Catalogue Management
           </h1>
           <p className="text-xs text-[#77736C] mt-1">
-            Manage your store apparel, pricing, CPA prior-price rules, and inventory connected to Supabase.
+            Manage your store apparel, categorize styles, and remove discontinued products from Supabase.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-[#171717] text-white px-4 py-2 text-xs uppercase tracking-wider font-semibold hover:bg-[#2A2A2A] rounded-sm flex items-center gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Product</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Link
+            href="/admin/categories"
+            className="border border-[#D5D1C8] text-[#171717] px-3.5 py-2 text-xs uppercase tracking-wider font-semibold hover:bg-white rounded-sm inline-flex items-center gap-1.5"
+          >
+            <Tag className="w-3.5 h-3.5" />
+            <span>Manage Categories</span>
+          </Link>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-[#171717] text-white px-4 py-2 text-xs uppercase tracking-wider font-semibold hover:bg-[#2A2A2A] rounded-sm flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Product</span>
+          </button>
+        </div>
       </div>
 
-      {successMessage && (
-        <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-sm flex items-center gap-2 text-xs text-emerald-800 font-medium">
-          <CheckCircle2 className="w-4 h-4" />
-          <span>{successMessage}</span>
+      {message && (
+        <div
+          className={`p-3.5 rounded-sm flex items-center gap-2 text-xs font-medium border ${
+            message.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          {message.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          )}
+          <span>{message.text}</span>
         </div>
       )}
 
@@ -172,7 +205,7 @@ export default function AdminProductsPage() {
           </div>
         ) : products.length === 0 ? (
           <div className="p-12 text-center text-xs text-[#77736C]">
-            No products found in catalog. Click "Add New Product" to add your first item.
+            No products found in catalog. Click &quot;Add New Product&quot; to add your first item.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -180,12 +213,12 @@ export default function AdminProductsPage() {
               <thead>
                 <tr className="border-b border-[#E8E5DF] text-[#77736C] bg-[#F7F6F2]">
                   <th className="py-3 px-4 font-medium">Product</th>
+                  <th className="py-3 px-4 font-medium">Category</th>
                   <th className="py-3 px-4 font-medium">Selling Price</th>
                   <th className="py-3 px-4 font-medium">Prior 30-Day</th>
-                  <th className="py-3 px-4 font-medium">GST</th>
-                  <th className="py-3 px-4 font-medium">Variants & Sizes</th>
+                  <th className="py-3 px-4 font-medium">Sizes</th>
                   <th className="py-3 px-4 font-medium">Status</th>
-                  <th className="py-3 px-4 font-medium text-right">Storefront</th>
+                  <th className="py-3 px-4 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8E5DF] text-[#171717]">
@@ -209,13 +242,21 @@ export default function AdminProductsPage() {
                           </div>
                         </div>
                       </td>
+                      <td className="py-3 px-4">
+                        {p.category?.name ? (
+                          <span className="bg-[#EFECE6] text-[#171717] px-2 py-0.5 rounded-sm text-[11px] font-medium">
+                            {p.category.name}
+                          </span>
+                        ) : (
+                          <span className="text-[#77736C] text-[11px] italic">Unassigned</span>
+                        )}
+                      </td>
                       <td className="py-3 px-4 font-bold text-[#171717]">
                         ₹{(p.base_price_paise / 100).toFixed(0)}
                       </td>
                       <td className="py-3 px-4 text-[#77736C]">
                         ₹{((p.prior_30d_price_paise || p.base_price_paise) / 100).toFixed(0)}
                       </td>
-                      <td className="py-3 px-4 text-[#77736C]">{p.gst_rate_percentage || 5}%</td>
                       <td className="py-3 px-4">
                         <div className="flex flex-wrap gap-1">
                           {p.variants?.slice(0, 4).map((v) => (
@@ -248,18 +289,17 @@ export default function AdminProductsPage() {
                         <Link
                           href={`/products/${p.slug}`}
                           target="_blank"
-                          className="border border-[#D5D1C8] px-2.5 py-1 rounded-sm text-[11px] text-[#171717] hover:bg-[#F7F6F2] inline-flex items-center gap-1"
+                          className="border border-[#D5D1C8] px-2 py-1 rounded-sm text-[11px] text-[#171717] hover:bg-white inline-flex items-center gap-1"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>View</span>
                         </Link>
                         <button
-                          onClick={() => handleDeleteProduct(p.id, p.name)}
-                          disabled={deletingId === p.id}
-                          className="border border-rose-200 px-2.5 py-1 rounded-sm text-[11px] text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1 disabled:opacity-50"
+                          onClick={() => setProductToDelete(p)}
+                          className="border border-rose-200 text-rose-700 bg-rose-50 hover:bg-rose-100 px-2 py-1 rounded-sm text-[11px] font-medium inline-flex items-center gap-1"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                          <span>{deletingId === p.id ? 'Deleting...' : 'Delete'}</span>
+                          <span>Delete</span>
                         </button>
                       </td>
                     </tr>
@@ -271,10 +311,51 @@ export default function AdminProductsPage() {
         )}
       </div>
 
+      {/* Delete Confirmation Modal */}
+      {productToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-sm shadow-xl max-w-md w-full p-6 space-y-4 border border-[#E8E5DF]">
+            <div className="flex items-center gap-3 text-rose-700">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-rose-700" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-[#171717]">Delete Product from Store</h3>
+                <p className="text-xs text-[#77736C]">This action permanently removes the product and its variants.</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#171717] bg-[#F7F6F2] p-3 rounded-sm border border-[#E8E5DF]">
+              Are you sure you want to delete <strong className="font-semibold text-black">{productToDelete.name}</strong>? 
+              This will remove its storefront page, variants, and design links immediately.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[#E8E5DF]">
+              <button
+                type="button"
+                disabled={Boolean(deletingId)}
+                onClick={() => setProductToDelete(null)}
+                className="px-4 py-2 border border-[#D5D1C8] rounded-sm text-xs font-medium hover:bg-[#F7F6F2]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(deletingId)}
+                onClick={handleDeleteProduct}
+                className="bg-rose-700 text-white px-4 py-2 rounded-sm text-xs font-semibold uppercase tracking-wider hover:bg-rose-800 disabled:opacity-50"
+              >
+                {deletingId ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Product Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-sm shadow-xl max-w-lg w-full p-6 space-y-4 border border-[#E8E5DF]">
+          <div className="bg-white rounded-sm shadow-xl max-w-lg w-full p-6 space-y-4 border border-[#E8E5DF] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E8E5DF] pb-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-[#171717]">
                 Add Apparel Product
@@ -298,6 +379,25 @@ export default function AdminProductsPage() {
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[#171717] font-semibold mb-1">Product Category</label>
+                <select
+                  value={newCategoryId}
+                  onChange={(e) => setNewCategoryId(e.target.value)}
+                  className="w-full p-2.5 bg-[#F7F6F2] border border-[#D5D1C8] rounded-sm text-[#171717]"
+                >
+                  <option value="">-- Select a Category (or leave Unassigned) --</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-[#77736C] mt-1">
+                  Need a new category? You can create one in the <Link href="/admin/categories" className="underline font-medium text-black">Category Manager</Link>.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
