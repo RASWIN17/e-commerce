@@ -123,3 +123,35 @@ export async function POST(req: Request) {
   }
 }
 
+export async function DELETE(req: Request) {
+  try {
+    const supabase = createAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database admin client unavailable' }, { status: 500 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Missing product ID' }, { status: 400 });
+    }
+
+    // 1. Clean up collection associations
+    await supabase.from('collection_products').delete().eq('product_id', id);
+
+    // 2. Delete product (variants, images, designs cascade automatically via FK)
+    const { error } = await supabase.from('products').delete().eq('id', id);
+
+    if (error) {
+      console.error('Error deleting product from Supabase:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Product deleted successfully' });
+  } catch (err: any) {
+    console.error('DELETE /api/admin/products error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  }
+}
+

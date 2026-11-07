@@ -39,6 +39,7 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
 
   // Form states
@@ -106,6 +107,31 @@ export default function AdminProductsPage() {
       alert(`Error: ${err.message || 'Product creation failed'}`);
     } finally {
       setSaving(false);
+      setTimeout(() => setSuccessMessage(''), 4000);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}" from the store catalog? This action will remove the product and its variants.`)) {
+      return;
+    }
+
+    try {
+      setDeletingId(id);
+      const res = await fetch(`/api/admin/products?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSuccessMessage(`Product "${name}" deleted successfully.`);
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        alert(`Failed to delete product: ${data.error || 'Server error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error deleting product: ${err.message || 'Network error'}`);
+    } finally {
+      setDeletingId(null);
       setTimeout(() => setSuccessMessage(''), 4000);
     }
   };
@@ -218,7 +244,7 @@ export default function AdminProductsPage() {
                           {p.is_active ? 'Active' : 'Draft'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-4 text-right space-x-2">
                         <Link
                           href={`/products/${p.slug}`}
                           target="_blank"
@@ -227,6 +253,14 @@ export default function AdminProductsPage() {
                           <Eye className="w-3.5 h-3.5" />
                           <span>View</span>
                         </Link>
+                        <button
+                          onClick={() => handleDeleteProduct(p.id, p.name)}
+                          disabled={deletingId === p.id}
+                          className="border border-rose-200 px-2.5 py-1 rounded-sm text-[11px] text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>{deletingId === p.id ? 'Deleting...' : 'Delete'}</span>
+                        </button>
                       </td>
                     </tr>
                   );
