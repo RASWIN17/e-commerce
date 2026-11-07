@@ -1,25 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, MapPin, Trash2, Edit2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '../../../lib/supabase/client';
+import { ArrowLeft, Plus, MapPin, Trash2, RefreshCw } from 'lucide-react';
 
 export default function SavedAddressesPage() {
-  const [addresses, setAddresses] = useState([
-    {
-      id: 'addr-1',
-      fullName: 'Rahul Sharma',
-      phone: '9876543210',
-      addressLine1: 'Flat 402, Sunrise Residency, 14th Main Rd',
-      addressLine2: 'Indiranagar',
-      city: 'Bengaluru',
-      state: 'Karnataka',
-      postalCode: '560038',
-      isDefault: true,
-    },
-  ]);
+  const router = useRouter();
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [newAddr, setNewAddr] = useState({
     fullName: '',
     phone: '',
@@ -30,27 +24,104 @@ export default function SavedAddressesPage() {
     postalCode: '',
   });
 
-  const handleAdd = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAddresses((prev) => [
-      ...prev,
-      {
-        ...newAddr,
-        id: `addr-${Date.now()}`,
-        isDefault: prev.length === 0,
-      },
-    ]);
-    setShowAddModal(false);
-    setNewAddr({
-      fullName: '',
-      phone: '',
-      addressLine1: '',
-      addressLine2: '',
-      city: '',
-      state: '',
-      postalCode: '',
-    });
+  const loadAddresses = async () => {
+    try {
+      setLoading(true);
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session || !session.user) {
+        router.push('/login');
+        return;
+      }
+
+      setUserId(session.user.id);
+
+      const { data, error } = await supabase
+        .from('user_addresses')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('is_default', { ascending: false });
+
+      if (!error && data) {
+        setAddresses(data);
+      }
+    } catch (err) {
+      console.error('Failed to load user addresses:', err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    loadAddresses();
+  }, [router]);
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+
+    try {
+      setSubmitting(true);
+      const supabase = createClient();
+      const isFirst = addresses.length === 0;
+
+      const { error } = await supabase.from('user_addresses').insert({
+        user_id: userId,
+        full_name: newAddr.fullName,
+        phone: newAddr.phone,
+        address_line1: newAddr.addressLine1,
+        address_line2: newAddr.addressLine2 || null,
+        city: newAddr.city,
+        state: newAddr.state,
+        postal_code: newAddr.postalCode,
+        country: 'India',
+        is_default: isFirst,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setShowAddModal(false);
+      setNewAddr({
+        fullName: '',
+        phone: '',
+        addressLine1: '',
+        addressLine2: '',
+        city: '',
+        state: '',
+        postalCode: '',
+      });
+      await loadAddresses();
+    } catch (err: any) {
+      alert(err.message || 'Failed to save address');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this address?')) return;
+    try {
+      const supabase = createClient();
+      await supabase.from('user_addresses').delete().eq('id', id);
+      setAddresses((prev) => prev.filter((a) => a.id !== id));
+    } catch (err: any) {
+      alert('Failed to delete address');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-20 text-center space-y-3">
+        <RefreshCw className="w-6 h-6 animate-spin text-[#171717] mx-auto" />
+        <p className="text-xs text-[#77736C]">Loading saved delivery addresses...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-6">
@@ -78,39 +149,55 @@ export default function SavedAddressesPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {addresses.map((addr) => (
-          <div
-            key={addr.id}
-            className="bg-white border border-[#E8E5DF] p-6 rounded-sm shadow-subtle space-y-3 relative"
+      {addresses.length === 0 ? (
+        <div className="bg-white border border-[#E8E5DF] p-12 rounded-sm text-center space-y-3">
+          <MapPin className="w-10 h-10 text-[#D5D1C8] mx-auto" />
+          <h2 className="text-sm font-bold text-[#171717]">No Saved Addresses</h2>
+          <p className="text-xs text-[#77736C]">
+            You have not saved any delivery addresses yet. Add your primary shipping address for fast checkout.
+          </p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-block bg-[#171717] text-white px-5 py-2 text-xs uppercase tracking-wider font-semibold rounded-sm hover:bg-[#2A2A2A]"
           >
-            {addr.isDefault && (
-              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-sm">
-                Default Delivery Address
-              </span>
-            )}
-            <h3 className="text-sm font-semibold text-[#171717]">{addr.fullName}</h3>
-            <div className="text-xs text-[#77736C] space-y-0.5">
-              <p>{addr.addressLine1}</p>
-              {addr.addressLine2 && <p>{addr.addressLine2}</p>}
-              <p>
-                {addr.city}, {addr.state} — {addr.postalCode}
-              </p>
-              <p className="pt-1 text-[#171717] font-medium">Phone: {addr.phone}</p>
-            </div>
+            Add New Address
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {addresses.map((addr) => (
+            <div
+              key={addr.id}
+              className="bg-white border border-[#E8E5DF] p-6 rounded-sm shadow-subtle space-y-3 relative"
+            >
+              {addr.is_default && (
+                <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-sm">
+                  Default Address
+                </span>
+              )}
+              <h3 className="text-sm font-semibold text-[#171717]">{addr.full_name}</h3>
+              <div className="text-xs text-[#77736C] space-y-0.5">
+                <p>{addr.address_line1}</p>
+                {addr.address_line2 && <p>{addr.address_line2}</p>}
+                <p>
+                  {addr.city}, {addr.state} — {addr.postal_code}
+                </p>
+                <p className="pt-1 text-[#171717] font-medium">Phone: {addr.phone}</p>
+              </div>
 
-            <div className="pt-3 border-t border-[#E8E5DF] flex items-center gap-4 text-xs">
-              <button
-                onClick={() => setAddresses((prev) => prev.filter((a) => a.id !== addr.id))}
-                className="text-rose-600 hover:underline flex items-center gap-1"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete</span>
-              </button>
+              <div className="pt-3 border-t border-[#E8E5DF] flex items-center gap-4 text-xs">
+                <button
+                  onClick={() => handleDelete(addr.id)}
+                  className="text-rose-600 hover:underline flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Modal */}
       {showAddModal && (
@@ -131,7 +218,7 @@ export default function SavedAddressesPage() {
                 required
                 placeholder="10-digit Phone"
                 value={newAddr.phone}
-                onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value })}
+                onChange={(e) => setNewAddr({ ...newAddr, phone: e.target.value.replace(/\D/g, '') })}
                 className="w-full p-2.5 bg-white border border-[#D5D1C8] rounded-sm"
               />
               <input
@@ -153,9 +240,10 @@ export default function SavedAddressesPage() {
                 <input
                   type="text"
                   required
+                  maxLength={6}
                   placeholder="PIN Code"
                   value={newAddr.postalCode}
-                  onChange={(e) => setNewAddr({ ...newAddr, postalCode: e.target.value })}
+                  onChange={(e) => setNewAddr({ ...newAddr, postalCode: e.target.value.replace(/\D/g, '') })}
                   className="w-full p-2.5 bg-white border border-[#D5D1C8] rounded-sm"
                 />
                 <input
@@ -185,9 +273,10 @@ export default function SavedAddressesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#171717] text-white rounded-sm font-semibold"
+                  disabled={submitting}
+                  className="px-4 py-2 bg-[#171717] text-white rounded-sm font-semibold disabled:opacity-50"
                 >
-                  Save Address
+                  {submitting ? 'Saving...' : 'Save Address'}
                 </button>
               </div>
             </form>
@@ -197,4 +286,3 @@ export default function SavedAddressesPage() {
     </div>
   );
 }
-

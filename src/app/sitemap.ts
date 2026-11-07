@@ -1,8 +1,8 @@
 import { MetadataRoute } from 'next';
-import { SAMPLE_PRODUCTS, SAMPLE_CATEGORIES, SAMPLE_COLLECTIONS } from '../lib/data/sampleProducts';
+import { getProducts, getCategories, getCollections } from '../lib/catalog';
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://imagix.in';
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://imagix.in';
 
   // Static Pages
   const staticPages = [
@@ -30,16 +30,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: route === '' ? 1.0 : 0.8,
   }));
 
+  const [products, categories, collections] = await Promise.all([
+    getProducts(),
+    getCategories(),
+    getCollections(),
+  ]);
+
   // Dynamic Products
-  const productPages = SAMPLE_PRODUCTS.map((p) => ({
+  const productPages = products.map((p) => ({
     url: `${baseUrl}/products/${p.slug}`,
-    lastModified: new Date(p.updated_at).toISOString(),
+    lastModified: new Date(p.updated_at || Date.now()).toISOString(),
     changeFrequency: 'daily' as const,
     priority: 0.9,
   }));
 
   // Dynamic Categories
-  const categoryPages = SAMPLE_CATEGORIES.map((c) => ({
+  const categoryPages = categories.map((c) => ({
     url: `${baseUrl}/category/${c.slug}`,
     lastModified: new Date().toISOString(),
     changeFrequency: 'weekly' as const,
@@ -47,7 +53,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   }));
 
   // Dynamic Collections
-  const collectionPages = SAMPLE_COLLECTIONS.map((c) => ({
+  const collectionPages = collections.map((c) => ({
     url: `${baseUrl}/collections/${c.slug}`,
     lastModified: new Date().toISOString(),
     changeFrequency: 'weekly' as const,
@@ -56,4 +62,3 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [...staticPages, ...productPages, ...categoryPages, ...collectionPages];
 }
-

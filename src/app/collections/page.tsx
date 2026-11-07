@@ -1,10 +1,12 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { SAMPLE_COLLECTIONS } from '../../lib/data/sampleProducts';
+import { getCollections } from '../../lib/catalog';
 import { ArrowRight } from 'lucide-react';
 
-export default function CollectionsPage() {
+export default async function CollectionsPage() {
+  const collections = await getCollections();
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       <div className="border-b border-[#E8E5DF] pb-4">
@@ -15,7 +17,7 @@ export default function CollectionsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {SAMPLE_COLLECTIONS.map((col) => (
+        {collections.map((col) => (
           <Link
             key={col.id}
             href={`/collections/${col.slug}`}
@@ -26,6 +28,7 @@ export default function CollectionsPage() {
                 src={col.banner_url || ''}
                 alt={col.name}
                 fill
+                sizes="(max-width: 768px) 100vw, 33vw"
                 className="object-cover group-hover:scale-[1.03] transition-transform duration-500"
               />
             </div>
@@ -44,4 +47,3 @@ export default function CollectionsPage() {
     </div>
   );
 }
-

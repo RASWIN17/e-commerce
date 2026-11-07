@@ -1,23 +1,48 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { SAMPLE_PRODUCTS, SAMPLE_CATEGORIES } from '../../lib/data/sampleProducts';
+import { getProducts, getCategories } from '../../lib/catalog';
+import { Product, Category } from '../../lib/types';
 import ProductCard from '../../components/ProductCard';
-import { SlidersHorizontal, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 export default function ShopPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('featured');
 
-  const filteredProducts = SAMPLE_PRODUCTS.filter((prod) => {
-    if (selectedCategory === 'all') return true;
-    return prod.category_id === selectedCategory;
-  }).sort((a, b) => {
-    if (sortBy === 'price-asc') return a.base_price_paise - b.base_price_paise;
-    if (sortBy === 'price-desc') return b.base_price_paise - a.base_price_paise;
-    return 0;
-  });
+  useEffect(() => {
+    async function loadShop() {
+      try {
+        setLoading(true);
+        const [pData, cData] = await Promise.all([
+          getProducts(),
+          getCategories(),
+        ]);
+        setProducts(pData);
+        setCategories(cData);
+      } catch (e) {
+        console.error('Failed to load shop data:', e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadShop();
+  }, []);
+
+  const filteredProducts = products
+    .filter((prod) => {
+      if (selectedCategory === 'all') return true;
+      return prod.category_id === selectedCategory;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'price-asc') return a.base_price_paise - b.base_price_paise;
+      if (sortBy === 'price-desc') return b.base_price_paise - a.base_price_paise;
+      return 0;
+    });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
@@ -64,9 +89,9 @@ export default function ShopPage() {
               : 'bg-white border-[#E8E5DF] text-[#171717] hover:border-[#77736C]'
           }`}
         >
-          All Products ({SAMPLE_PRODUCTS.length})
+          All Products ({products.length})
         </button>
-        {SAMPLE_CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <button
             key={cat.id}
             onClick={() => setSelectedCategory(cat.id)}
@@ -82,13 +107,19 @@ export default function ShopPage() {
       </div>
 
       {/* Products Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-        {filteredProducts.map((prod) => (
-          <ProductCard key={prod.id} product={prod} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="py-20 text-center text-xs text-[#77736C]">
+          Loading collection...
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+          {filteredProducts.map((prod) => (
+            <ProductCard key={prod.id} product={prod} />
+          ))}
+        </div>
+      )}
 
-      {filteredProducts.length === 0 && (
+      {!loading && filteredProducts.length === 0 && (
         <div className="text-center py-16 space-y-3">
           <p className="text-sm text-[#77736C]">No products found in this category.</p>
           <button
@@ -102,4 +133,3 @@ export default function ShopPage() {
     </div>
   );
 }
-

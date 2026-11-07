@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Script from 'next/script';
 import { useCart } from '../../lib/cart-context';
 import { calculateDeliveryEstimate } from '../../lib/delivery/calculator';
 import { ShieldCheck, Truck, Lock, ArrowRight, AlertCircle } from 'lucide-react';
@@ -98,12 +99,21 @@ export default function CheckoutPage() {
         throw new Error(data.error || 'Failed to create payment order');
       }
 
-      // Check if Cashfree production / sandbox SDK is used or simulation
-      // If Cashfree session is created:
       clearCart();
 
-      // Redirect to tracking page simulating confirmed payment in demo or real Cashfree checkout
-      router.push(`/orders/${data.orderNumber}/track?session_id=${data.paymentSessionId}&status=confirmed`);
+      // Invoke real Cashfree Checkout in TEST mode (Sandbox)
+      if (typeof window !== 'undefined' && (window as any).Cashfree) {
+        const cashfree = (window as any).Cashfree({
+          mode: 'sandbox',
+        });
+        cashfree.checkout({
+          paymentSessionId: data.paymentSessionId,
+          redirectTarget: '_self',
+        });
+      } else {
+        // Redirection fallback to Cashfree sandbox hosted checkout
+        window.location.href = `https://sandbox.cashfree.com/pg/orders?payment_session_id=${data.paymentSessionId}`;
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Something went wrong processing payment');
     } finally {
@@ -127,6 +137,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      <Script src="https://sdk.cashfree.com/js/v3/cashfree.js" strategy="afterInteractive" />
       <div className="flex items-center justify-between border-b border-[#E8E5DF] pb-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#171717]">
           Secure Checkout

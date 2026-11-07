@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Clock, CheckCircle2, AlertCircle, FileText } from 'lucide-react';
 import Link from 'next/link';
+import { createClient } from '../../lib/supabase/client';
 
 export default function GrievancePage() {
   const [name, setName] = useState('');
@@ -13,17 +14,38 @@ export default function GrievancePage() {
   const [description, setDescription] = useState('');
   const [complaintRef, setComplaintRef] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description.trim()) return;
+    setErrorMsg('');
+    if (!description.trim() || !name.trim() || !email.trim() || !phone.trim()) return;
 
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const supabase = createClient();
       const ref = `GRV-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      const { error } = await supabase.from('grievance_complaints').insert({
+        complaint_reference: ref,
+        complainant_name: name,
+        email,
+        phone,
+        category,
+        description: orderNumber ? `[Order: ${orderNumber}] ${description}` : description,
+        status: 'submitted',
+      });
+
+      if (error) {
+        throw error;
+      }
+
       setComplaintRef(ref);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to submit grievance. Please try again.');
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   };
 
   return (
@@ -103,7 +125,14 @@ export default function GrievancePage() {
             </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <>
+            {errorMsg && (
+              <div className="bg-rose-50 border border-rose-200 p-3 rounded-sm flex items-center gap-2 text-xs text-rose-700">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[#171717] font-semibold mb-1">Complainant Full Name *</label>
@@ -190,7 +219,8 @@ export default function GrievancePage() {
               {loading ? 'Registering Ticket...' : 'Submit Formal Grievance'}
             </button>
           </form>
-        )}
+        </>
+      )}
       </div>
 
       <div className="text-[11px] text-[#77736C] space-y-1">

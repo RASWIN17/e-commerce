@@ -8,15 +8,17 @@ import {
   Package,
   MapPin,
   Heart,
-  User,
   LogOut,
   ChevronRight,
-  ShieldCheck,
+  ShoppingBag,
+  Clock,
 } from 'lucide-react';
 
 export default function AccountPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [recentOrder, setRecentOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,26 +28,42 @@ export default function AccountPage() {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (session) {
-          setUser(session.user);
-        } else {
-          // Fallback guest profile for preview
-          setUser({
-            email: 'customer@imagix.in',
-            user_metadata: { full_name: 'Rahul Sharma' },
-          });
+
+        if (!session || !session.user) {
+          router.push('/login');
+          return;
+        }
+
+        setUser(session.user);
+
+        // Fetch real profile from Supabase
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        setProfile(prof || null);
+
+        // Fetch recent order for this user
+        const { data: orders } = await supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .or(`user_id.eq.${session.user.id},guest_email.eq.${session.user.email}`)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (orders && orders.length > 0) {
+          setRecentOrder(orders[0]);
         }
       } catch (e) {
-        setUser({
-          email: 'customer@imagix.in',
-          user_metadata: { full_name: 'Rahul Sharma' },
-        });
+        console.error('Error loading account data:', e);
       } finally {
         setLoading(false);
       }
     }
     loadUser();
-  }, []);
+  }, [router]);
 
   const handleSignOut = async () => {
     try {
@@ -63,17 +81,20 @@ export default function AccountPage() {
     );
   }
 
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Member';
+  const initial = displayName.charAt(0).toUpperCase();
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-8">
       {/* Account Header */}
       <div className="bg-white border border-[#E8E5DF] p-6 sm:p-8 rounded-sm shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-[#EFECE6] border border-[#D5D1C8] flex items-center justify-center text-lg font-bold text-[#171717]">
-            {user?.user_metadata?.full_name?.charAt(0) || 'U'}
+            {initial}
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-[#171717]">
-              {user?.user_metadata?.full_name || 'Valued Member'}
+              {displayName}
             </h1>
             <p className="text-xs text-[#77736C]">{user?.email}</p>
           </div>
@@ -99,7 +120,7 @@ export default function AccountPage() {
             <ChevronRight className="w-4 h-4 text-[#77736C] group-hover:translate-x-1 transition-transform" />
           </div>
           <h2 className="text-sm font-semibold text-[#171717]">My Orders</h2>
-          <p className="text-xs text-[#77736C]">Track current shipments, past drops and invoices.</p>
+          <p className="text-xs text-[#77736C]">Track current shipments, past drops, and invoices.</p>
         </Link>
 
         <Link
@@ -136,24 +157,38 @@ export default function AccountPage() {
           </Link>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-          <div>
-            <span className="font-semibold text-[#171717]">Order #IMX-839201</span>
-            <p className="text-[#77736C] mt-0.5">Sunset Graphic Tee (M, Washed Black) • 1 item</p>
-            <p className="text-[11px] text-emerald-800 font-medium mt-1">
-              • Status: Sent to Qikink Production (Tirupur)
-            </p>
-          </div>
+        {recentOrder ? (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+            <div>
+              <span className="font-semibold text-[#171717]">Order #{recentOrder.order_number}</span>
+              <p className="text-[#77736C] mt-0.5">
+                {recentOrder.order_items?.[0]?.product_name || 'Item'} • Total: ₹{(recentOrder.total_amount_paise / 100).toFixed(2)}
+              </p>
+              <p className="text-[11px] text-emerald-800 font-medium mt-1">
+                • Status: {recentOrder.status}
+              </p>
+            </div>
 
-          <Link
-            href="/orders/IMX-839201/track"
-            className="inline-block bg-[#171717] text-white px-4 py-2 rounded-sm text-xs uppercase font-medium tracking-wider hover:bg-[#2A2A2A] self-start sm:self-auto"
-          >
-            Track Shipment
-          </Link>
-        </div>
+            <Link
+              href={`/orders/${recentOrder.order_number}/track`}
+              className="inline-block bg-[#171717] text-white px-4 py-2 rounded-sm text-xs uppercase font-medium tracking-wider hover:bg-[#2A2A2A] self-start sm:self-auto"
+            >
+              Track Shipment
+            </Link>
+          </div>
+        ) : (
+          <div className="py-6 text-center space-y-3 text-xs text-[#77736C]">
+            <ShoppingBag className="w-8 h-8 mx-auto text-[#D5D1C8]" />
+            <p>You haven&apos;t placed any orders yet.</p>
+            <Link
+              href="/shop"
+              className="inline-block bg-[#171717] text-white px-5 py-2 uppercase tracking-wider font-semibold rounded-sm hover:bg-[#2A2A2A]"
+            >
+              Explore Collection
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

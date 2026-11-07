@@ -1,5 +1,3 @@
-import crypto from 'crypto';
-
 export interface CreateOrderParams {
   orderId: string;
   orderAmount: number; // in INR rupees (e.g. 799.00)
@@ -50,17 +48,7 @@ export class CashfreeClient {
 
   public async createPaymentOrder(params: CreateOrderParams): Promise<CashfreeOrderResponse> {
     if (!this.isConfigured()) {
-      // In sandbox/development when keys are not yet provided by user,
-      // return a realistic mock session for seamless preview
-      return {
-        cf_order_id: `cf_mock_${Date.now()}`,
-        order_id: params.orderId,
-        order_status: 'ACTIVE',
-        payment_session_id: `session_mock_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-        order_amount: params.orderAmount,
-        order_currency: params.orderCurrency || 'INR',
-        entity: 'order',
-      };
+      throw new Error('Cashfree credentials (CASHFREE_APP_ID / CASHFREE_SECRET_KEY) are not configured');
     }
 
     const payload = {
@@ -101,11 +89,7 @@ export class CashfreeClient {
 
   public async getOrderDetails(orderId: string): Promise<any> {
     if (!this.isConfigured()) {
-      return {
-        order_id: orderId,
-        order_status: 'PAID',
-        order_amount: 799.0,
-      };
+      throw new Error('Cashfree credentials are not configured');
     }
 
     const res = await fetch(`${this.baseUrl}/orders/${encodeURIComponent(orderId)}`, {
@@ -119,7 +103,7 @@ export class CashfreeClient {
 
     if (!res.ok) {
       const err = await res.text();
-      throw new Error(`Cashfree fetch order failed: ${err}`);
+      throw new Error(`Cashfree fetch order failed (${res.status}): ${err}`);
     }
 
     return await res.json();
@@ -127,12 +111,7 @@ export class CashfreeClient {
 
   public async initiateRefund(orderId: string, refundAmount: number, refundNote: string): Promise<any> {
     if (!this.isConfigured()) {
-      return {
-        cf_refund_id: `mock_ref_${Date.now()}`,
-        order_id: orderId,
-        refund_amount: refundAmount,
-        refund_status: 'SUCCESS',
-      };
+      throw new Error('Cashfree credentials are not configured');
     }
 
     const res = await fetch(`${this.baseUrl}/orders/${encodeURIComponent(orderId)}/refunds`, {
@@ -152,7 +131,7 @@ export class CashfreeClient {
 
     if (!res.ok) {
       const err = await res.text();
-      throw new Error(`Cashfree refund failed: ${err}`);
+      throw new Error(`Cashfree refund failed (${res.status}): ${err}`);
     }
 
     return await res.json();
@@ -160,4 +139,3 @@ export class CashfreeClient {
 }
 
 export const cashfreeClient = new CashfreeClient();
-

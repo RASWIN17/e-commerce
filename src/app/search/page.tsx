@@ -1,14 +1,32 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Search as SearchIcon, X } from 'lucide-react';
-import { SAMPLE_PRODUCTS } from '../../lib/data/sampleProducts';
+import React, { useEffect, useState } from 'react';
+import { Search as SearchIcon, X, RefreshCw } from 'lucide-react';
+import { getProducts } from '../../lib/catalog';
+import { Product } from '../../lib/types';
 import ProductCard from '../../components/ProductCard';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const searchResults = SAMPLE_PRODUCTS.filter((p) => {
+  useEffect(() => {
+    async function loadAllProducts() {
+      try {
+        setLoading(true);
+        const prods = await getProducts();
+        setProducts(prods);
+      } catch (err) {
+        console.error('Failed to load products for search:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAllProducts();
+  }, []);
+
+  const searchResults = products.filter((p) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
@@ -54,14 +72,20 @@ export default function SearchPage() {
         </span>
       </div>
 
-      {/* Products Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-        {searchResults.map((prod) => (
-          <ProductCard key={prod.id} product={prod} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="py-20 text-center text-xs text-[#77736C] space-y-2">
+          <RefreshCw className="w-6 h-6 animate-spin text-[#171717] mx-auto" />
+          <p>Searching inventory...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+          {searchResults.map((prod) => (
+            <ProductCard key={prod.id} product={prod} />
+          ))}
+        </div>
+      )}
 
-      {searchResults.length === 0 && (
+      {!loading && searchResults.length === 0 && (
         <div className="text-center py-16 space-y-2">
           <p className="text-sm font-semibold text-[#171717]">No products matched your search.</p>
           <p className="text-xs text-[#77736C]">Try searching for &quot;Tee&quot;, &quot;Heavyweight&quot;, or &quot;Hoodie&quot;.</p>
@@ -70,4 +94,3 @@ export default function SearchPage() {
     </div>
   );
 }
-

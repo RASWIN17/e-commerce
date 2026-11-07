@@ -1,4 +1,4 @@
-import { qikinkClient, QikinkCreateOrderPayload, QikinkOrderItem } from './client';
+import { qikinkClient, QikinkCreateOrderPayload, QikinkLineItem } from './client';
 import { createAdminClient } from '../supabase/admin';
 
 export interface ProcessOrderResult {
@@ -15,11 +15,10 @@ export async function queueAndProcessFulfilmentJob(orderId: string): Promise<Pro
   const supabase = createAdminClient();
 
   if (!supabase) {
-    // If Supabase service key is not configured locally, simulate safe queue processing
     return {
-      success: true,
-      qikinkOrderId: `QK-SIM-${Date.now()}`,
-      jobStatus: 'submitted',
+      success: false,
+      error: 'Supabase admin client not configured. Cannot process fulfilment job.',
+      jobStatus: 'failed',
     };
   }
 
@@ -91,24 +90,23 @@ export async function queueAndProcessFulfilmentJob(orderId: string): Promise<Pro
   }
 
   // 4. Construct Qikink payload
-  const address = order.shipping_address_snapshot;
+  const address = order.shipping_address_snapshot || {};
   const nameParts = (address.full_name || 'Valued Customer').trim().split(' ');
-  const firstName = nameParts[0] || 'Valued';
-  const lastName = nameParts.slice(1).join(' ') || 'Customer';
+  const firstName = nameParts[0] || 'Customer';
+  const lastName = nameParts.slice(1).join(' ') || firstName;
 
-  const lineItems: QikinkOrderItem[] = order.order_items.map((item: any) => {
+  const lineItems: QikinkLineItem[] = (order.order_items || []).map((item: any) => {
     const design = item.design_snapshot;
     return {
-      search_type: 'sku',
-      query: item.qikink_sku || item.sku,
-      quantity: item.quantity,
-      print_type: 'DTG',
+      sku: item.qikink_sku || item.sku,
+      quantity: String(item.quantity || 1),
+      price: String(((item.unit_price_paise || 0) / 100).toFixed(2)),
       designs: design
         ? [
             {
               design_code: design.design_code,
               design_link: design.artwork_url,
-              placement: design.placement,
+              placement: design.placement || 'front',
               width: design.print_width,
               height: design.print_height,
             },
@@ -119,31 +117,35 @@ export async function queueAndProcessFulfilmentJob(orderId: string): Promise<Pro
 
   const qikinkPayload: QikinkCreateOrderPayload = {
     order_number: order.order_number,
-    first_name: firstName,
-    last_name: lastName,
-    address1: address.address_line1,
-    address2: address.address_line2 || '',
-    city: address.city,
-    state: address.state,
-    pincode: address.postal_code,
-    phone: address.phone || order.guest_phone || '9999999999',
-    email: order.guest_email || 'orders@imagix.in',
-    country: 'India',
-    shipping_type: 'Express',
-    payment_type: 'Prepaid',
+    qikink_shipping: '1',
+    gateway: 'Prepaid',
+    total_order_value: String(((order.total_amount_paise || 0) / 100).toFixed(2)),
     line_items: lineItems,
+    shipping_address: {
+      first_name: firstName,
+      last_name: lastName,
+      address1: address.address_line1 || 'Main St',
+      address2: address.address_line2 || '',
+      city: address.city || 'Tirupur',
+      province: address.state || 'Tamil Nadu',
+      zip: address.postal_code || '641602',
+      phone: address.phone || order.guest_phone || '9999999999',
+      email: order.guest_email || 'orders@imagix.in',
+      country_code: 'IN',
+    },
   };
 
   try {
     const response = await qikinkClient.createOrder(qikinkPayload);
+    const qkOrderId = response.qikink_order_id || response.order_id || String(response.id || '');
 
-    if (response.status && response.qikink_order_id) {
+    if (response.status || qkOrderId) {
       // Update job to submitted
       await supabase
         .from('fulfilment_jobs')
         .update({
           status: 'submitted',
-          qikink_order_id: response.qikink_order_id,
+          qikink_order_id: qkOrderId,
           payload_sent: qikinkPayload,
           response_received: response,
           updated_at: new Date().toISOString(),
@@ -160,21 +162,21 @@ export async function queueAndProcessFulfilmentJob(orderId: string): Promise<Pro
       await supabase.from('shipments').insert({
         order_id: orderId,
         fulfilment_job_id: jobId,
-        courier_name: 'Qikink Express Logistics',
-        current_status: 'Order submitted to production',
+        courier_name: 'Qikink Logistics Hub',
+        current_status: 'Order queued for DTG printing',
         tracking_history: [
           {
-            status: 'Production Queued',
+            status: 'Production Staged',
             location: 'Tirupur Hub',
             timestamp: new Date().toISOString(),
-            description: 'Artwork verified and blank staged for DTG printing.',
+            description: 'Artwork verified and blank staged for printing.',
           },
         ],
       });
 
       return {
         success: true,
-        qikinkOrderId: response.qikink_order_id,
+        qikinkOrderId: qkOrderId,
         jobStatus: 'submitted',
       };
     } else {
@@ -202,4 +204,3 @@ export async function queueAndProcessFulfilmentJob(orderId: string): Promise<Pro
     };
   }
 }
-

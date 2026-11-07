@@ -20,15 +20,6 @@ export function verifyCashfreeWebhook(
   const secretKey = secretKeyOverride || process.env.CASHFREE_SECRET_KEY || '';
 
   if (!secretKey) {
-    // If not configured, we flag in non-production environments
-    if (process.env.NODE_ENV === 'development') {
-      try {
-        const parsed = JSON.parse(rawBody);
-        return { isValid: true, data: parsed };
-      } catch (err: any) {
-        return { isValid: false, error: 'Invalid JSON payload' };
-      }
-    }
     return { isValid: false, error: 'Cashfree secret key not configured on server' };
   }
 
@@ -39,7 +30,7 @@ export function verifyCashfreeWebhook(
   // Prevent replay attacks (check if timestamp is older than 15 minutes)
   const webhookTime = parseInt(timestampHeader, 10);
   const currentTime = Math.floor(Date.now() / 1000);
-  if (Math.abs(currentTime - webhookTime) > 900) {
+  if (isNaN(webhookTime) || Math.abs(currentTime - webhookTime) > 900) {
     return { isValid: false, error: 'Webhook timestamp expired or out of sync' };
   }
 
@@ -49,12 +40,10 @@ export function verifyCashfreeWebhook(
     hmac.update(signaturePayload);
     const expectedSignature = hmac.digest('base64');
 
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(signatureHeader),
-      Buffer.from(expectedSignature)
-    );
+    const sigBuf = Buffer.from(signatureHeader);
+    const expBuf = Buffer.from(expectedSignature);
 
-    if (!isValid) {
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
       return { isValid: false, error: 'Signature mismatch' };
     }
 
@@ -64,4 +53,3 @@ export function verifyCashfreeWebhook(
     return { isValid: false, error: `Signature verification exception: ${err.message}` };
   }
 }
-
